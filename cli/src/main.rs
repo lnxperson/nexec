@@ -1,5 +1,13 @@
 use clap::{Parser, Subcommand};
 
+#[macro_export]
+macro_rules! fail {
+    ($($arg:tt)*) => {{
+        eprintln!("\x1b[31merror: {}\x1b[0m", format_args!($($arg)*));
+        std::process::exit(1);
+    }};
+}
+
 mod install;
 mod detect;
 mod config;

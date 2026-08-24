@@ -11,15 +11,13 @@ pub fn update() {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_default();
     if uid != "0" {
-        eprintln!("error: update requires root (need to write to /usr/bin and ESP)");
-        std::process::exit(1);
+        crate::fail!("update requires root (need to write to /usr/bin and ESP)");
     }
 
     let tmp = std::env::temp_dir().join("nexec_update");
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap_or_else(|e| {
-        eprintln!("error: failed to create temp dir: {}", e);
-        std::process::exit(1);
+        crate::fail!("failed to create temp dir: {}", e);
     });
 
     let cli_path = tmp.join("nexec");
@@ -32,13 +30,10 @@ pub fn update() {
         .arg(&format!("{}/nexec", RELEASE_URL))
         .status()
         .unwrap_or_else(|e| {
-            eprintln!("error: failed to run curl: {}", e);
-            eprintln!("  Is curl installed?");
-            std::process::exit(1);
+            crate::fail!("failed to run curl: {}\n  Is curl installed?", e);
         });
     if !status.success() {
-        eprintln!("error: failed to download nexec from releases");
-        std::process::exit(1);
+        crate::fail!("failed to download nexec from releases");
     }
 
     let _ = std::fs::set_permissions(&cli_path, std::os::unix::fs::PermissionsExt::from_mode(0o755));
@@ -50,13 +45,10 @@ pub fn update() {
         .arg(&format!("{}/nexec-efi.efi", RELEASE_URL))
         .status()
         .unwrap_or_else(|e| {
-            eprintln!("error: failed to run curl: {}", e);
-            eprintln!("  Is curl installed?");
-            std::process::exit(1);
+            crate::fail!("failed to run curl: {}\n  Is curl installed?", e);
         });
     if !status.success() {
-        eprintln!("error: failed to download nexec-efi.efi from releases");
-        std::process::exit(1);
+        crate::fail!("failed to download nexec-efi.efi from releases");
     }
 
     println!("  Installing EFI to ESP...");
@@ -65,18 +57,15 @@ pub fn update() {
         .arg(&efi_path)
         .status()
         .unwrap_or_else(|e| {
-            eprintln!("error: failed to run installer: {}", e);
-            std::process::exit(1);
+            crate::fail!("failed to run installer: {}", e);
         });
     if !status.success() {
-        eprintln!("error: installer failed");
-        std::process::exit(1);
+        crate::fail!("installer failed");
     }
 
     println!("  Updating /usr/bin/nexec...");
     std::fs::copy(&cli_path, "/usr/bin/nexec").unwrap_or_else(|e| {
-        eprintln!("error: failed to copy nexec to /usr/bin: {}", e);
-        std::process::exit(1);
+        crate::fail!("failed to copy nexec to /usr/bin: {}", e);
     });
     let _ = std::fs::set_permissions("/usr/bin/nexec", std::os::unix::fs::PermissionsExt::from_mode(0o755));
 

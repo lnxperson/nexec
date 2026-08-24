@@ -18,6 +18,7 @@ const ESP_CANDIDATES: &[&str] = &["/boot", "/efi", "/boot/efi"];
 const SYS_MOUNTS: &str = "/proc/mounts";
 const RELEASE_URL: &str = "https://github.com/person134/nexec/releases/latest/download";
 
+/// Color-printing macro: prints in the given ANSI color, then resets.
 macro_rules! cprintln {
     ($color:expr, $($arg:tt)*) => { println!("{}{}{}", $color, format_args!($($arg)*), RESET) };
 }
@@ -34,6 +35,8 @@ pub struct InstallArgs {
     pub no_config: bool,
 }
 
+/// Install nexec to the ESP: build/locate the EFI, sign if needed, copy to ESP,
+/// install the CLI, generate config with detected entries, and register with efibootmgr.
 pub fn install(args: InstallArgs) {
     let InstallArgs {
         esp_path,
@@ -50,8 +53,7 @@ pub fn install(args: InstallArgs) {
     let efi_binary = if let Some(path) = &efi_path {
         path.clone()
     } else if no_build {
-        eprintln!("error: --efi <path> required when --no-build is set");
-        std::process::exit(1);
+        crate::fail!("--efi <path> required when --no-build is set");
     } else {
         // Check for a prebuilt EFI next to the CLI binary
         match std::env::current_exe() {
@@ -67,12 +69,7 @@ pub fn install(args: InstallArgs) {
                     match build_bootloader() {
                         Ok(p) => p,
                         Err(e) => {
-                            eprintln!("\x1b[31merror:{} {}", RESET, e);
-                            eprintln!("  Either install the UEFI target:");
-                            eprintln!("    rustup target add x86_64-unknown-uefi");
-                            eprintln!("  Or provide a prebuilt EFI:");
-                            eprintln!("    sudo nexec install --efi /path/to/nexec-efi.efi --no-build");
-                            std::process::exit(1);
+                            crate::fail!("{}\n  Either install the UEFI target:\n    rustup target add x86_64-unknown-uefi\n  Or provide a prebuilt EFI:\n    sudo nexec install --efi /path/to/nexec-efi.efi --no-build", e);
                         }
                     }
                 }
@@ -81,8 +78,7 @@ pub fn install(args: InstallArgs) {
                 match build_bootloader() {
                     Ok(p) => p,
                     Err(e) => {
-                        eprintln!("error: {}", e);
-                        std::process::exit(1);
+                        crate::fail!("{}", e);
                     }
                 }
             }
@@ -90,8 +86,7 @@ pub fn install(args: InstallArgs) {
     };
 
     if !Path::new(&efi_binary).exists() {
-        eprintln!("\x1b[31merror:{} EFI binary not found at {}", RESET, efi_binary);
-        std::process::exit(1);
+        crate::fail!("EFI binary not found at {}", efi_binary);
     }
 
     // 2. Sign the EFI binary for Secure Boot if needed
@@ -113,13 +108,11 @@ pub fn install(args: InstallArgs) {
 
     // 3. Detect ESP
     let esp = esp_path.unwrap_or_else(|| detect_esp().unwrap_or_else(|| {
-        eprintln!("\x1b[31merror:{} could not detect ESP. Specify with --esp", RESET);
-        std::process::exit(1);
+        crate::fail!("could not detect ESP. Specify with --esp");
     }));
 
     if !Path::new(&esp).is_dir() {
-        eprintln!("\x1b[31merror:{} ESP path '{}' is not a directory", RESET, esp);
-        std::process::exit(1);
+        crate::fail!("ESP path '{}' is not a directory", esp);
     }
 
     // 4. Copy EFI binary to ESP
@@ -128,12 +121,10 @@ pub fn install(args: InstallArgs) {
 
     cprintln!(CYAN, "Installing to: {}", install_path);
     std::fs::create_dir_all(&install_dir).unwrap_or_else(|e| {
-        eprintln!("\x1b[31merror:{} failed to create {}: {}", RESET, install_dir, e);
-        std::process::exit(1);
+        crate::fail!("failed to create {}: {}", install_dir, e);
     });
     std::fs::copy(&efi_to_install, &install_path).unwrap_or_else(|e| {
-        eprintln!("\x1b[31merror:{} failed to copy {}: {}", RESET, efi_to_install, e);
-        std::process::exit(1);
+        crate::fail!("failed to copy {}: {}", efi_to_install, e);
     });
     cprintln!(GREEN, "  Copied {} -> {}", efi_to_install, install_path);
 
@@ -142,10 +133,11 @@ pub fn install(args: InstallArgs) {
         cprintln!(YELLOW, "warning: could not determine binary path: {}", e);
         std::process::exit(1);
     });
-    let _ = std::fs::remove_file(CLI_INSTALL_PATH);
+    if let Err(e) = std::fs::remove_file(CLI_INSTALL_PATH) {
+        cprintln!(DIM, "  (no previous CLI at {}: {})", CLI_INSTALL_PATH, e);
+    }
     std::fs::copy(&self_path, CLI_INSTALL_PATH).unwrap_or_else(|e| {
-        eprintln!("\x1b[31merror:{} failed to copy to {}: {} (try running as root)", RESET, CLI_INSTALL_PATH, e);
-        std::process::exit(1);
+        crate::fail!("failed to copy to {}: {} (try running as root)", CLI_INSTALL_PATH, e);
     });
     cprintln!(GREEN, "  Installed CLI to {}", CLI_INSTALL_PATH);
 
@@ -355,6 +347,8 @@ fn build_bootloader() -> Result<String, String> {
     Ok(efi_path.to_string_lossy().to_string())
 }
 
+/// Detect the EFI System Partition (ESP) by checking common mount points
+/// and falling back to `lsblk` for any FAT partition.
 pub(crate) fn detect_esp() -> Option<String> {
     // Common ESP mount points
     for candidate in ESP_CANDIDATES {
@@ -475,8 +469,7 @@ fn ensure_efibootmgr() -> bool {
                 .args(*args)
                 .status()
                 .unwrap_or_else(|e| {
-                    eprintln!("\x1b[31merror:{} failed to run {}: {}", RESET, pm, e);
-                    std::process::exit(1);
+                    crate::fail!("failed to run {}: {}", pm, e);
                 });
             if status.success() {
                 cprintln!(GREEN, "  Installed.");
@@ -551,6 +544,7 @@ fn register_efibootmgr(disk: &str, part: u32, loader_path: &str) -> bool {
     }
 }
 
+/// Show whether nexec is installed on the detected ESP.
 pub fn status() {
     cprintln!(BOLD_CYAN, "nexec status");
     cprintln!(DIM, "------------");
@@ -574,10 +568,10 @@ pub fn status() {
     }
 }
 
+/// Remove nexec from the ESP and optionally from the UEFI boot entries.
 pub fn remove(esp_path: Option<String>, no_efi: bool, all: bool, remove_self: bool) {
     let esp = esp_path.unwrap_or_else(|| detect_esp().unwrap_or_else(|| {
-        eprintln!("\x1b[31merror:{} could not detect ESP. Specify with --esp", RESET);
-        std::process::exit(1);
+        crate::fail!("could not detect ESP. Specify with --esp");
     }));
 
     let mut removed_anything = false;
@@ -588,8 +582,7 @@ pub fn remove(esp_path: Option<String>, no_efi: bool, all: bool, remove_self: bo
 
     if Path::new(&efi_file).exists() {
         std::fs::remove_file(&efi_file).unwrap_or_else(|e| {
-            eprintln!("\x1b[31merror:{} failed to remove {}: {}", RESET, efi_file, e);
-            std::process::exit(1);
+            crate::fail!("failed to remove {}: {}", efi_file, e);
         });
         cprintln!(GREEN, "  Removed: {}", efi_file);
         removed_anything = true;

@@ -7,8 +7,7 @@ type DetectedEntry = (String, String, String, Option<String>, Vec<String>);
 pub fn init(output: String) {
     let path = Path::new(&output);
     if path.exists() {
-        eprintln!("error: {} already exists", output);
-        std::process::exit(1);
+        crate::fail!("{} already exists", output);
     }
 
     // Write main config
@@ -40,25 +39,21 @@ timeout = 5
     };
 
     let parent = main_path.parent().unwrap_or_else(|| {
-        eprintln!("error: invalid output path with no parent directory");
-        std::process::exit(1);
+        crate::fail!("invalid output path with no parent directory");
     });
     std::fs::create_dir_all(parent).unwrap_or_else(|e| {
-        eprintln!("error: failed to create directories: {}", e);
-        std::process::exit(1);
+        crate::fail!("failed to create directories: {}", e);
     });
 
     std::fs::write(&main_path, main_content).unwrap_or_else(|e| {
-        eprintln!("error: failed to write {}: {}", main_path.display(), e);
-        std::process::exit(1);
+        crate::fail!("failed to write {}: {}", main_path.display(), e);
     });
     println!("Created: {}", main_path.display());
 
     // Create entries directory with sample entries
     let entries_dir = main_path.parent().unwrap().join("entries");
     std::fs::create_dir_all(&entries_dir).unwrap_or_else(|e| {
-        eprintln!("error: failed to create {}: {}", entries_dir.display(), e);
-        std::process::exit(1);
+        crate::fail!("failed to create {}: {}", entries_dir.display(), e);
     });
 
     // Sample entry: arch
@@ -78,8 +73,7 @@ options = root=UUID=your-root-uuid rw quiet
 efi = /EFI/Microsoft/Boot/bootmgfw.efi
 "#;
     std::fs::write(entries_dir.join("windows.conf"), win_entry).unwrap_or_else(|e| {
-        eprintln!("error: failed to write windows.conf: {}", e);
-        std::process::exit(1);
+        crate::fail!("failed to write windows.conf: {}", e);
     });
     println!("Created: {}", entries_dir.join("windows.conf").display());
 
@@ -262,23 +256,23 @@ fn build_linux_options() -> String {
 }
 
 fn build_linux_options_from(cmdline: &str) -> String {
-    let mut opts = cmdline.to_string();
-
-    opts = opts.split_whitespace()
+    let parts: Vec<&str> = cmdline.split_whitespace().collect();
+    let mut opts: Vec<&str> = parts.iter()
         .filter(|p| !p.starts_with("initrd=") && !p.starts_with("archiso"))
-        .collect::<Vec<_>>()
-        .join(" ");
+        .copied()
+        .collect();
 
-    if !opts.split_whitespace().any(|p| p == "rootwait") {
-        opts = if opts.is_empty() { "rootwait".into() } else { format!("{} rootwait", opts) };
+    if !opts.iter().any(|p| *p == "rootwait") {
+        opts.push("rootwait");
     }
-    if !opts.split_whitespace().any(|p| p == "rw") {
-        opts = if opts.is_empty() { "rw".into() } else { format!("{} rw", opts) };
+    if !opts.iter().any(|p| *p == "rw") {
+        opts.push("rw");
     }
-    if !opts.split_whitespace().any(|p| p.starts_with("panic=")) {
-        opts = format!("{} panic=10", opts);
+    if !opts.iter().any(|p| p.starts_with("panic=")) {
+        opts.push("panic=10");
     }
-    opts.split_whitespace().filter(|p| *p != "quiet").collect::<Vec<_>>().join(" ")
+    opts.retain(|p| *p != "quiet");
+    opts.join(" ")
 }
 
 /// Returns (main_config_text, Vec<(entry_name, entry_text)>)
@@ -468,8 +462,7 @@ fn scan_esp_root_kernels_all(esp_path: &Path, entries: &mut Vec<DetectedEntry>) 
 pub fn detect(esp_path: Option<String>) {
     let esp = esp_path.unwrap_or_else(|| {
         super::install::detect_esp().unwrap_or_else(|| {
-            eprintln!("error: could not detect ESP. Specify with --esp");
-            std::process::exit(1);
+            crate::fail!("could not detect ESP. Specify with --esp");
         })
     });
     let (main_conf, entry_files) = generate_detected_config(&esp);
@@ -485,8 +478,7 @@ pub fn detect(esp_path: Option<String>) {
 pub fn set_default(entry: String, esp_path: Option<String>) {
     let esp = esp_path.unwrap_or_else(|| {
         super::install::detect_esp().unwrap_or_else(|| {
-            eprintln!("error: could not detect ESP. Specify with --esp");
-            std::process::exit(1);
+            crate::fail!("could not detect ESP. Specify with --esp");
         })
     });
     let esp = esp.trim_end_matches('/');
@@ -501,15 +493,12 @@ pub fn set_default(entry: String, esp_path: Option<String>) {
     let path = match config_path {
         Some(p) => p.clone(),
         None => {
-            eprintln!("error: no nexec.conf found on ESP");
-            eprintln!("  Run 'nexec install' first.");
-            std::process::exit(1);
+            crate::fail!("no nexec.conf found on ESP\n  Run 'nexec install' first.");
         }
     };
 
     let content = std::fs::read_to_string(&path).unwrap_or_else(|e| {
-        eprintln!("error: failed to read {}: {}", path, e);
-        std::process::exit(1);
+        crate::fail!("failed to read {}: {}", path, e);
     });
 
     let mut found = false;
@@ -538,8 +527,7 @@ pub fn set_default(entry: String, esp_path: Option<String>) {
     let new_content = lines.join("\n");
 
     std::fs::write(&path, new_content).unwrap_or_else(|e| {
-        eprintln!("error: failed to write {}: {}", path, e);
-        std::process::exit(1);
+        crate::fail!("failed to write {}: {}", path, e);
     });
 
     println!("Default entry set to '{}' in {}", entry, path);
@@ -548,8 +536,7 @@ pub fn set_default(entry: String, esp_path: Option<String>) {
 pub fn edit(esp_path: Option<String>) {
     let esp = esp_path.unwrap_or_else(|| {
         super::install::detect_esp().unwrap_or_else(|| {
-            eprintln!("error: could not detect ESP. Specify with --esp");
-            std::process::exit(1);
+            crate::fail!("could not detect ESP. Specify with --esp");
         })
     });
     let esp = esp.trim_end_matches('/');
@@ -563,9 +550,7 @@ pub fn edit(esp_path: Option<String>) {
     let path = match path {
         Some(p) => p.clone(),
         None => {
-            eprintln!("error: no nexec.conf found on ESP");
-            eprintln!("  Run 'nexec install' to create one.");
-            std::process::exit(1);
+            crate::fail!("no nexec.conf found on ESP\n  Run 'nexec install' to create one.");
         }
     };
 
@@ -578,9 +563,7 @@ pub fn edit(esp_path: Option<String>) {
         .arg(&path)
         .status()
         .unwrap_or_else(|e| {
-            eprintln!("error: failed to run editor '{}': {}", editor, e);
-            eprintln!("  Set $EDITOR or $VISUAL to your preferred editor.");
-            std::process::exit(1);
+            crate::fail!("failed to run editor '{}': {}\n  Set $EDITOR or $VISUAL to your preferred editor.", editor, e);
         });
 
     if !status.success() {

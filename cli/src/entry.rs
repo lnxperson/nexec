@@ -4,8 +4,7 @@ use std::process::Command;
 fn get_esp(esp: Option<String>) -> String {
     esp.unwrap_or_else(|| {
         super::install::detect_esp().unwrap_or_else(|| {
-            eprintln!("error: could not detect ESP. Specify with --esp");
-            std::process::exit(1);
+            crate::fail!("could not detect ESP. Specify with --esp");
         })
     })
 }
@@ -19,9 +18,7 @@ pub fn list(esp: Option<String>) {
     let dir = entries_dir(&esp);
     let dir_path = Path::new(&dir);
     if !dir_path.is_dir() {
-        eprintln!("error: entries directory not found at {}", dir);
-        eprintln!("  Run 'nexec install' first.");
-        std::process::exit(1);
+        crate::fail!("entries directory not found at {}\n  Run 'nexec install' first.", dir);
     }
 
     println!("Boot entries in {}:", dir);
@@ -29,8 +26,7 @@ pub fn list(esp: Option<String>) {
 
     let mut files: Vec<_> = std::fs::read_dir(dir_path)
         .unwrap_or_else(|e| {
-            eprintln!("error: failed to read {}: {}", dir, e);
-            std::process::exit(1);
+            crate::fail!("failed to read {}: {}", dir, e);
         })
         .filter_map(|e| e.ok())
         .filter(|e| {
@@ -74,6 +70,8 @@ pub fn list(esp: Option<String>) {
     }
 }
 
+/// Backup entry files before making changes.
+/// Reports errors as warnings but does not abort.
 fn backup_entries(esp: &str) {
     let esp = esp.trim_end_matches('/');
     let entries_dir = format!("{}/EFI/nexec/entries", esp);
@@ -85,23 +83,28 @@ fn backup_entries(esp: &str) {
     }
 
     let backup_path = Path::new(&backup_dir);
-    let _ = std::fs::create_dir_all(backup_path);
+    if let Err(e) = std::fs::create_dir_all(backup_path) {
+        eprintln!("warning: failed to create backup dir {}: {}", backup_dir, e);
+        return;
+    }
 
-    // Clear old backups
     if let Ok(dir) = std::fs::read_dir(backup_path) {
         for entry in dir.flatten() {
-            let _ = std::fs::remove_file(entry.path());
+            if let Err(e) = std::fs::remove_file(entry.path()) {
+                eprintln!("warning: failed to remove old backup {}: {}", entry.path().display(), e);
+            }
         }
     }
 
-    // Copy all entry files
     if let Ok(dir) = std::fs::read_dir(entries_path) {
         for entry in dir.flatten() {
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
             if name_str.ends_with(".conf") {
                 let dst = backup_path.join(&*name_str);
-                let _ = std::fs::copy(&entry.path(), &dst);
+                if let Err(e) = std::fs::copy(entry.path(), &dst) {
+                    eprintln!("warning: failed to backup {}: {}", entry.path().display(), e);
+                }
             }
         }
     }
@@ -121,8 +124,7 @@ pub fn add(
     let dir = entries_dir(&esp);
     let dir_path = Path::new(&dir);
     std::fs::create_dir_all(dir_path).unwrap_or_else(|e| {
-        eprintln!("error: failed to create {}: {}", dir, e);
-        std::process::exit(1);
+        crate::fail!("failed to create {}: {}", dir, e);
     });
 
     let filename = if let Some(t) = tries {
@@ -133,8 +135,7 @@ pub fn add(
 
     let entry_path = dir_path.join(&filename);
     if entry_path.exists() {
-        eprintln!("error: entry already exists at {}", entry_path.display());
-        std::process::exit(1);
+        crate::fail!("entry already exists at {}", entry_path.display());
     }
 
     let t = title.unwrap_or_else(|| name.clone());
@@ -148,8 +149,7 @@ pub fn add(
     }
 
     std::fs::write(&entry_path, content).unwrap_or_else(|e| {
-        eprintln!("error: failed to write {}: {}", entry_path.display(), e);
-        std::process::exit(1);
+        crate::fail!("failed to write {}: {}", entry_path.display(), e);
     });
     println!("Created entry: {}", entry_path.display());
 }
@@ -165,14 +165,12 @@ pub fn remove(name: String, esp: Option<String>) {
     let path = match found {
         Some(p) => p,
         None => {
-            eprintln!("error: entry '{}' not found in {}", name, dir);
-            std::process::exit(1);
+            crate::fail!("entry '{}' not found in {}", name, dir);
         }
     };
 
     std::fs::remove_file(&path).unwrap_or_else(|e| {
-        eprintln!("error: failed to remove {}: {}", path.display(), e);
-        std::process::exit(1);
+        crate::fail!("failed to remove {}: {}", path.display(), e);
     });
     println!("Removed entry: {}", path.display());
 }
@@ -187,8 +185,7 @@ pub fn edit(name: String, esp: Option<String>) {
     let path = match found {
         Some(p) => p,
         None => {
-            eprintln!("error: entry '{}' not found in {}", name, dir);
-            std::process::exit(1);
+            crate::fail!("entry '{}' not found in {}", name, dir);
         }
     };
 
@@ -200,9 +197,7 @@ pub fn edit(name: String, esp: Option<String>) {
         .arg(&path)
         .status()
         .unwrap_or_else(|e| {
-            eprintln!("error: failed to run editor '{}': {}", editor, e);
-            eprintln!("  Set $EDITOR or $VISUAL to your preferred editor.");
-            std::process::exit(1);
+            crate::fail!("failed to run editor '{}': {}\n  Set $EDITOR or $VISUAL to your preferred editor.", editor, e);
         });
 
     if !status.success() {
@@ -237,15 +232,13 @@ pub fn mark_good(name: String, esp: Option<String>) {
     let path = match found {
         Some(p) => p,
         None => {
-            eprintln!("error: entry '{}' not found with boot counter in {}", name, dir);
-            std::process::exit(1);
+            crate::fail!("entry '{}' not found with boot counter in {}", name, dir);
         }
     };
 
     let new_path = dir_path.join(format!("{}.conf", name));
     std::fs::rename(&path, &new_path).unwrap_or_else(|e| {
-        eprintln!("error: failed to rename {}: {}", path.display(), e);
-        std::process::exit(1);
+        crate::fail!("failed to rename {}: {}", path.display(), e);
     });
     println!("Marked '{}' as good (removed boot counter).", name);
 }
@@ -260,14 +253,12 @@ pub fn set_tries(name: String, tries: u32, esp: Option<String>) {
     let path = match found {
         Some(p) => p,
         None => {
-            eprintln!("error: entry '{}' not found in {}", name, dir);
-            std::process::exit(1);
+            crate::fail!("entry '{}' not found in {}", name, dir);
         }
     };
 
     let content = std::fs::read_to_string(&path).unwrap_or_else(|e| {
-        eprintln!("error: failed to read {}: {}", path.display(), e);
-        std::process::exit(1);
+        crate::fail!("failed to read {}: {}", path.display(), e);
     });
 
     let new_filename = if tries > 0 {
@@ -283,8 +274,7 @@ pub fn set_tries(name: String, tries: u32, esp: Option<String>) {
     }
 
     std::fs::write(&new_path, &content).unwrap_or_else(|e| {
-        eprintln!("error: failed to write {}: {}", new_path.display(), e);
-        std::process::exit(1);
+        crate::fail!("failed to write {}: {}", new_path.display(), e);
     });
 
     if path != new_path {
@@ -305,7 +295,6 @@ fn find_entry_file(dir: &Path, name: &str) -> Option<std::path::PathBuf> {
         for entry in read_dir.flatten() {
             let fname = entry.file_name();
             let fname = fname.to_string_lossy();
-            // Match name.conf or name+*.conf
             if fname == format!("{}.conf", name) || fname.starts_with(&format!("{}+", name)) {
                 if fname.ends_with(".conf") {
                     return Some(entry.path());

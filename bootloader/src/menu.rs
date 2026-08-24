@@ -648,6 +648,7 @@ fn handle_key(key: Key, menu: &mut Menu) -> KeyAction {
             // Configurable actions
             if ch == kb.firmware.to_ascii_lowercase() {
                 boot_firmware();
+                return KeyAction::Nothing;
             }
             if ch == kb.manual.to_ascii_lowercase() {
                 return KeyAction::Manual;

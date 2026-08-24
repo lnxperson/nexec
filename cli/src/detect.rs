@@ -3,8 +3,7 @@ use std::path::Path;
 pub fn detect(esp_path: Option<String>) {
     let esp = esp_path.unwrap_or_else(|| {
         super::install::detect_esp().unwrap_or_else(|| {
-            eprintln!("error: could not detect ESP. Specify with --esp");
-            std::process::exit(1);
+            crate::fail!("could not detect ESP. Specify with --esp");
         })
     });
     let esp = esp.trim_end_matches('/');

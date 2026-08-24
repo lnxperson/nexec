@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-cli:
+    name: Build CLI (Linux x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release -p nexec
+      - name: Upload CLI binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexec-linux-x86_64
+          path: target/release/nexec
+          if-no-files-found: error
+
+  build-efi:
+    name: Build EFI bootloader (x86_64-unknown-uefi)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-uefi
+      - run: cargo build --release -p nexec-efi --target x86_64-unknown-uefi
+      - name: Upload EFI binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexec-efi-x86_64
+          path: target/x86_64-unknown-uefi/release/nexec-efi.efi
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: [build-cli, build-efi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nexec-linux-x86_64
+          path: release/
+      - uses: actions/download-artifact@v4
+        with:
+          name: nexec-efi-x86_64
+          path: release/
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          chmod +x release/nexec
+          mv release/nexec-efi.efi release/nexec-efi.efi
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/nexec
+            release/nexec-efi.efi
+          generate_release_notes: true

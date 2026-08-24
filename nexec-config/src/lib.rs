@@ -205,9 +205,6 @@ impl Config {
                         "no_scan" => {
                             config.no_scan = matches!(value.to_lowercase().as_str(), "true" | "yes" | "1");
                         }
-                        "scan" => {
-                            config.no_scan = !matches!(value.to_lowercase().as_str(), "true" | "yes" | "1");
-                        }
                         "order" => {
                             config.order = Some(
                                 value.split_whitespace().map(|s| s.to_string()).collect(),
@@ -369,13 +366,13 @@ efi = /EFI/Microsoft/Boot/bootmgfw.efi
     }
 
     #[test]
-    fn scan_directive() {
+    fn scan_is_no_longer_supported() {
         let cfg = parse("scan = false").unwrap();
-        assert!(cfg.no_scan);
+        assert!(!cfg.no_scan);
     }
 
     #[test]
-    fn scan_true() {
+    fn scan_true_not_supported() {
         let cfg = parse("scan = true").unwrap();
         assert!(!cfg.no_scan);
     }
@@ -675,15 +672,15 @@ linux "/vmlinuz-linux""#;
     // ---- Config.parse edge cases ----
 
     #[test]
-    fn config_with_scan_false() {
+    fn config_with_scan_false_is_ignored() {
         let cfg = parse("scan = false").unwrap();
-        assert!(cfg.no_scan);
+        assert!(!cfg.no_scan);
     }
 
     #[test]
-    fn config_with_scan_no() {
+    fn config_with_scan_no_is_ignored() {
         let cfg = parse("scan = no").unwrap();
-        assert!(cfg.no_scan);
+        assert!(!cfg.no_scan);
     }
 
     #[test]
