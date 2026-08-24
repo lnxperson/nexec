@@ -1,0 +1,24 @@
+name: Build CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to upload to (e.g. v2.3.0)"
+        required: true
+
+jobs:
+  build-cli:
+    name: Build CLI (Linux x86_64)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release -p nexec
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: target/release/nexec
