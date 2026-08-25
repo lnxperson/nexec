@@ -3,9 +3,10 @@
 A lightweight UEFI boot manager for x86_64 Linux and Windows. Finds your
 installed operating systems, presents a boot menu, and loads the kernel.
 
-## Why
+## Legacy BIOS port
 
-I built nexec for two reasons. First, I wanted a project that'd make a solid addition to my GitHub portfolio. Second, and more practically, I got tired of writing systemd-boot entries from scratch every time I reinstalled. nexec detects all your operating systems automatically and handles the setup, so you don't have to think about it.
+I also developed a [legacy BIOS port](https://github.com/person134/nexec-lgc) of this tool as well. You have to use that
+if you have an older BIOS based system.
 
 ## Installation
 
