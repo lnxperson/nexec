@@ -5,7 +5,7 @@ installed operating systems, presents a boot menu, and loads the kernel.
 
 ## Legacy BIOS port
 
-I also developed a [legacy BIOS port](https://github.com/person134/nexec-lgc) of this tool as well. You have to use that
+I also developed a [legacy BIOS port](https://github.com/lnxperson/nexec-lgc) of this tool as well. You have to use that
 if you have an older BIOS based system.
 
 ## Installation
